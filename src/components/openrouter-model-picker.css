@@ -1,0 +1,124 @@
+/* Minimal, theme-neutral styles for OpenRouterModelPicker.
+   Adjust to match your app's design system. */
+
+.orp-root {
+  position: relative;
+  max-width: 480px;
+  font-size: 14px;
+}
+
+.orp-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 8px;
+  background: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.orp-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orp-panel {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 8px;
+  background: Canvas;
+  color: CanvasText;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.orp-controls {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.orp-search {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 6px;
+  background: inherit;
+  color: inherit;
+}
+
+.orp-provider,
+.orp-refresh {
+  padding: 6px 8px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 6px;
+  background: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.orp-count {
+  padding: 4px 10px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.orp-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.orp-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.orp-item:hover {
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.orp-item-selected {
+  background: rgba(70, 130, 240, 0.18);
+}
+
+.orp-item-name {
+  font-weight: 600;
+}
+
+.orp-item-id,
+.orp-item-meta {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.orp-status {
+  padding: 12px;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.orp-error {
+  color: #c0392b;
+}
