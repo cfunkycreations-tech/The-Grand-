@@ -1,3 +1,32 @@
+# The Grand — website + OpenRouter model picker
+
+## The website (`index.html`)
+
+`index.html` is a **complete, self-contained website** — no build, no install.
+Double-click it to open in any browser, or host it anywhere static.
+
+It has three things:
+
+1. **Live model explorer** — fetches *every* model OpenRouter offers in real
+   time, with search, provider filter, favorites (★, saved locally), and
+   pricing/context badges. Open it in a real browser to see the full live list.
+2. **HTML5 album player** — press play, drag-and-drop audio in, or preload your
+   tracks. To ship your album with the site, drop the files in an `audio/`
+   folder next to `index.html` and list them in the `ALBUM_TRACKS` array near
+   the bottom of the file (there's a commented example).
+3. **Contact / mailing list** — change `you@yourdomain.com` in the file to your
+   address; the signup opens the visitor's mail client (no backend needed).
+
+### Put it online (a public URL tonight)
+
+Any static host works — the file is fully self-contained:
+
+- **GitHub Pages:** repo → Settings → Pages → deploy from this branch (root).
+- **Netlify / Vercel / Cloudflare Pages:** drag the folder in, or point it at
+  this repo. Done.
+
+---
+
 # OpenRouter model picker — always in sync
 
 This branch contains a drop-in fix for the settings model picker so it always
