@@ -1,3 +1,32 @@
+# The Grand — website + OpenRouter model picker
+
+## The website (`index.html`)
+
+`index.html` is a **complete, self-contained website** — no build, no install.
+Double-click it to open in any browser, or host it anywhere static.
+
+It has three things:
+
+1. **Live model explorer** — fetches *every* model OpenRouter offers in real
+   time, with search, provider filter, favorites (★, saved locally), and
+   pricing/context badges. Open it in a real browser to see the full live list.
+2. **HTML5 album player** — press play, drag-and-drop audio in, or preload your
+   tracks. To ship your album with the site, drop the files in an `audio/`
+   folder next to `index.html` and list them in the `ALBUM_TRACKS` array near
+   the bottom of the file (there's a commented example).
+3. **Contact / mailing list** — change `you@yourdomain.com` in the file to your
+   address; the signup opens the visitor's mail client (no backend needed).
+
+### Put it online (a public URL tonight)
+
+Any static host works — the file is fully self-contained:
+
+- **GitHub Pages:** repo → Settings → Pages → deploy from this branch (root).
+- **Netlify / Vercel / Cloudflare Pages:** drag the folder in, or point it at
+  this repo. Done.
+
+---
+
 # OpenRouter model picker — always in sync
 
 This branch contains a drop-in fix for the settings model picker so it always
@@ -28,12 +57,43 @@ the ↻ button refreshes it on demand.
 
 | File | Purpose |
 | --- | --- |
-| `src/lib/openrouter-models.ts` | Fetch + cache the live catalog; search, provider, pricing, and context-length helpers. Framework-agnostic (works in React, Vue, plain JS, React Native*). |
-| `src/components/OpenRouterModelPicker.tsx` | Ready-made React settings control: searchable dropdown, provider filter, pricing + context badges, refresh button, loading/error states. |
-| `src/components/openrouter-model-picker.css` | Neutral default styles — swap for your design system. |
+| `src/lib/openrouter-models.ts` | Fetch + cache the live catalog; search, provider, pricing, context-length, plus favorites + recents helpers. Framework-agnostic (works in React, Vue, plain JS, React Native*). |
+| `src/components/OpenRouterModelPicker.tsx` | Ready-made React settings control: searchable dropdown, provider filter, pricing + context badges, refresh button, loading/error states, keyboard nav, favorites, recents, and a virtualized list. |
+| `src/components/openrouter-model-picker.css` | Themeable default styles driven by `--orp-*` design tokens. |
 
 \* On React Native, replace the `localStorage` calls with AsyncStorage; the
 in-memory cache works as-is.
+
+## What the picker does
+
+- **Searchable + provider filter.** Multi-word, case-insensitive search over id,
+  name, and description; filter to a single provider.
+- **Full keyboard navigation.** `↑`/`↓` to move, `Home`/`End` to jump, `Enter`
+  to select, `Esc` to close. The active row auto-scrolls into view.
+- **Favorites (★) and recents.** Star any model to pin it to the top; recently
+  selected models float up too. Both persist in `localStorage`.
+- **Virtualized list.** Only the visible rows render, so all 400+ models scroll
+  smoothly with no framework or list library.
+- **Graceful offline.** If OpenRouter is unreachable, the last cached list is
+  served instead of breaking.
+
+## Theming
+
+Every color, radius, and size is a `--orp-*` custom property on `.orp-root`.
+Override any of them — on `:root`, a wrapper, or the element itself — to reskin
+the picker without editing selectors:
+
+```css
+.orp-root {
+  --orp-accent: #7c3aed;   /* selection + focus ring */
+  --orp-radius: 12px;
+  --orp-star: #f59e0b;
+}
+```
+
+Sensible light **and** dark defaults ship in the CSS (via
+`prefers-color-scheme`), using system `Canvas`/`CanvasText` colors so the picker
+inherits your app's surface by default.
 
 ## Wiring it into your settings screen
 
