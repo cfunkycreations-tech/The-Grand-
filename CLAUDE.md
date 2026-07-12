@@ -1,93 +1,157 @@
 # CLAUDE.md
 
-Guidance for AI assistants working in this repository.
+Operating manual for AI assistants (and humans) working in this repo. Read it
+before you touch code — it encodes the design decisions that are easy to break
+and hard to notice.
 
-## What this repo is
+---
 
-A small, **drop-in code library** (not a full application) that provides a
-settings model picker backed by OpenRouter's live model catalog. The whole
-point is to replace a stale, hardcoded list of model names with one that
-fetches every model OpenRouter currently offers (400+) at runtime and caches
-it for an hour.
+## TL;DR
 
-There is **no build system, no `package.json`, no test suite, and no lockfile**
-in this repo. The source files are meant to be copied into a consuming
-React/TypeScript project that already has its own toolchain. Keep that in mind:
-you cannot run, build, lint, or test in isolation here, so correctness comes
-from careful reading rather than a local test run.
+- **What:** a drop-in OpenRouter model picker. Replaces a stale hardcoded model
+  list with OpenRouter's **live catalog (400+ models)**, fetched at runtime and
+  cached for an hour.
+- **Shape:** a *library*, not an app. Three files under `src/`. No
+  `package.json`, no build, no tests, no lockfile.
+- **Prime directive:** never reintroduce a hardcoded model array. The whole repo
+  exists to kill that pattern.
+- **You can't run it here.** Correctness comes from careful reading, not
+  `npm test`. There is no toolchain in-repo to invoke.
 
-## Layout
+---
+
+## Architecture at a glance
 
 ```
-README.md                                   Usage docs & wiring examples
-src/
-  lib/openrouter-models.ts                  Data layer: fetch + cache + helpers
-  components/OpenRouterModelPicker.tsx       React UI control
-  components/openrouter-model-picker.css     Neutral default styles
+                 OpenRouter public API
+      GET https://openrouter.ai/api/v1/models   (no auth, no SDK)
+                          │
+                          ▼
+   ┌──────────────────────────────────────────────┐
+   │  src/lib/openrouter-models.ts   (data layer)  │
+   │                                               │
+   │  getOpenRouterModels()                        │
+   │    ├─ memory cache (memoryCache) ─┐  fresh?    │
+   │    ├─ localStorage (CACHE_KEY)  ──┤─ 1h TTL    │
+   │    ├─ live fetch (deduped via inflight)        │
+   │    └─ network fails → serve STALE, don't throw │
+   │                                               │
+   │  pure helpers: searchModels, providerOf,      │
+   │  listProviders, formatPricing, formatContext  │
+   └──────────────────────────────────────────────┘
+                          │  (imports helpers only)
+                          ▼
+   ┌──────────────────────────────────────────────┐
+   │  src/components/OpenRouterModelPicker.tsx     │
+   │  React control: search box · provider filter  │
+   │  · pricing/context badges · ↻ refresh         │
+   │  · loading / error / empty states             │
+   └──────────────────────────────────────────────┘
+                          │
+                          ▼
+   src/components/openrouter-model-picker.css  (orp- prefix, theme-neutral)
 ```
 
-### `src/lib/openrouter-models.ts` — the data layer
+**The layering is the whole design.** The data layer knows nothing about React
+or the DOM; the component knows nothing about fetching or caching. Keep that
+wall intact — it's what lets the data layer run in Vue, plain JS, or React
+Native (swap `localStorage` for AsyncStorage) untouched.
 
-Framework-agnostic. Works in React, Vue, plain JS, and React Native (with an
-AsyncStorage swap for `localStorage`).
+---
 
-- `getOpenRouterModels(forceRefresh = false)` — the main entry point. Serves
-  from memory cache, then `localStorage`, then a live fetch of
-  `https://openrouter.ai/api/v1/models` (public, no API key). Dedupes
-  concurrent calls via an `inflight` promise. On network failure it returns
-  the last good (stale) list rather than throwing — graceful offline
-  degradation is a deliberate design property; preserve it.
-- Cache: memory (`memoryCache`) + `localStorage` under `CACHE_KEY`, 1-hour TTL
-  (`CACHE_TTL_MS`). Bump the `-v1` suffix on `CACHE_KEY` if you change the
-  cached shape, so old cached data is invalidated.
-- Pure helpers: `searchModels` (multi-term, case-insensitive over id/name/
-  description), `providerOf`, `listProviders`, `formatPricing` (per-million-
-  token), `formatContext` (compact "200K ctx"). These have no side effects —
-  keep them pure so they stay trivially usable outside React.
+## File map
 
-### `src/components/OpenRouterModelPicker.tsx` — the UI
+| File | Role | Depends on |
+| --- | --- | --- |
+| `src/lib/openrouter-models.ts` | Fetch + cache + pure helpers. Framework-agnostic. | browser `fetch`/`localStorage` (accessed defensively) |
+| `src/components/OpenRouterModelPicker.tsx` | React settings control. | `react`, the data layer helpers |
+| `src/components/openrouter-model-picker.css` | Neutral default styling. | nothing |
+| `README.md` | User-facing usage + wiring examples. | — |
 
-A self-contained React control: searchable dropdown, provider filter, pricing
-+ context badges, a ↻ refresh button, and loading/error/empty states. It calls
-only the exported helpers from the data layer — it does not fetch or cache
-directly. Uses `react` hooks (`useEffect`/`useMemo`/`useRef`/`useState`); no
-other runtime dependencies.
+---
 
-### `src/components/openrouter-model-picker.css`
+## Data layer API (`openrouter-models.ts`)
 
-Theme-neutral styles under the `orp-` class prefix, using system color
-keywords (`Canvas`/`CanvasText`) so they inherit the host app's look. Meant to
-be overridden by the consuming design system.
+| Export | Kind | Notes |
+| --- | --- | --- |
+| `OpenRouterModel` | type | Upstream model shape. **Treat almost every field as optional** — the API varies per model/provider. |
+| `getOpenRouterModels(forceRefresh?)` | async | The one entry point. Memory → localStorage → live fetch. Dedupes concurrent callers via `inflight`. On failure returns the last good list. |
+| `searchModels(models, query)` | pure | Multi-term, case-insensitive AND-match over `id` + `name` + `description`. |
+| `providerOf(model)` | pure | Slug before the `/` in the id (`anthropic/claude-sonnet-5` → `anthropic`), else `"other"`. |
+| `listProviders(models)` | pure | Unique provider slugs, sorted. |
+| `formatPricing(model)` | pure | Per-million-token string, e.g. `$3.00/M in · $15.00/M out`; `"free"` when zero. |
+| `formatContext(model)` | pure | Compact context size, e.g. `200K ctx`, `1M ctx`. |
+
+### Caching model (know this cold)
+
+- **Two tiers:** in-memory `memoryCache` (survives within a session) + persistent
+  `localStorage` under `CACHE_KEY`. TTL is `CACHE_TTL_MS` = 1 hour.
+- **Freshness gate:** `isFresh()` — serve cache only if younger than the TTL.
+- **In-flight dedupe:** the `inflight` promise means ten simultaneous callers
+  trigger **one** network request. Don't remove this.
+- **Graceful degradation:** if the fetch throws and any cache exists (even
+  stale), `getOpenRouterModels` returns it instead of throwing. The picker must
+  keep working offline. This is a feature, not an accident.
+- **Cache versioning:** `CACHE_KEY` ends in `-v1`. If you change the cached
+  shape, **bump the suffix** so stale-shaped data is invalidated, not misread.
+
+---
+
+## The component (`OpenRouterModelPicker.tsx`)
+
+- Self-contained, controlled: `value` (selected model id) in, `onChange(id)` out.
+  Optional `placeholder`.
+- Calls **only** the exported helpers — it never fetches or caches directly.
+- State machine: `loading` → `ready` | `error`, with a retry path and a `↻`
+  button that calls `getOpenRouterModels(true)` (force refresh).
+- Accessibility is wired in (`role="listbox"`/`option`, `aria-selected`,
+  `aria-expanded`, click-outside to close). Preserve it if you edit the markup.
+- Only runtime dep is `react` hooks. Don't pull in a UI kit.
+
+---
 
 ## Conventions
 
-- **TypeScript + React, ES modules.** Match the existing style: 2-space
-  indent, double quotes, named exports (the component also has a default
-  export). `OpenRouterModel` is the shared type; treat most of its fields as
-  optional because the upstream API shape can vary.
-- **Keep the data layer framework-agnostic.** Don't import React or DOM-only
-  APIs into `openrouter-models.ts`. Access browser globals defensively
-  (`globalThis.localStorage?.…`) so it doesn't crash in non-browser runtimes.
-- **CSS class names use the `orp-` prefix.** Keep new classes consistent and
-  keep colors theme-neutral.
-- **Don't hardcode a model list.** The entire reason this repo exists is to
-  stay in sync with OpenRouter automatically. Any change that reintroduces a
-  static model array defeats the purpose.
-- Preserve the offline/stale-cache fallback and the in-flight request dedupe
-  when touching `getOpenRouterModels`.
+- **TypeScript + React, ES modules.** 2-space indent, double quotes, named
+  exports (component also default-exports). Match the surrounding style exactly.
+- **Keep the data layer framework-agnostic.** No React, no DOM-only globals in
+  `openrouter-models.ts`. Reach for browser globals defensively:
+  `globalThis.localStorage?.…`, so non-browser runtimes don't crash.
+- **CSS: `orp-` prefix, theme-neutral.** Use system color keywords
+  (`Canvas`/`CanvasText`) so the host app's theme flows through. New classes
+  follow the prefix.
+- **Never hardcode a model list.** See prime directive. If a "quick fix" adds a
+  static array of model names, it's wrong by construction.
+- **Don't break the three invariants** when editing `getOpenRouterModels`:
+  in-flight dedupe, stale-cache fallback, and the freshness/TTL gate.
 
-## Verifying changes
+---
 
-There's nothing to run in-repo. To validate a change, drop the files into a
-React app with the OpenRouter endpoint reachable, render `<OpenRouterModelPicker>`,
-and confirm: the list populates, search + provider filter narrow it, ↻ forces a
-refresh, and disabling the network still shows the cached list. When editing
-only the pure helpers, reason through the inputs/outputs directly.
+## Verifying changes (no in-repo runner)
+
+There's nothing to `build` or `test` here. To actually validate:
+
+1. Drop the files into a React app with network access to
+   `https://openrouter.ai/api/v1/models`.
+2. Render `<OpenRouterModelPicker value={…} onChange={…} />` (see `README.md`).
+3. Confirm the loop end to end:
+   - list populates on open;
+   - typing narrows results (multi-word works);
+   - the provider dropdown filters;
+   - `↻` forces a fresh fetch;
+   - **kill the network and reopen** — the cached list still renders (this is
+     the test people forget).
+
+When you only touch the pure helpers, reason through inputs/outputs directly —
+they have no side effects, so a paper trace is a valid check.
+
+---
 
 ## Git workflow
 
-- Active development branch for this work: **`claude/claude-md-docs-yeb1yf`**.
-- The existing feature work lives on `claude/openrouter-model-picker-sync-x3v919`.
-- Commit with clear messages, push with `git push -u origin <branch>`, and open
-  a **draft** PR for the pushed branch if one isn't already open. Never push to
-  another branch without explicit permission.
+- **Active branch for this work:** `claude/claude-md-docs-yeb1yf`.
+- **Repo default branch:** `claude/openrouter-model-picker-sync-x3v919` (the
+  feature branch this stacks on) — PRs target it.
+- Clear commit messages. Push with `git push -u origin <branch>`. Open a **draft**
+  PR for the branch if one isn't already open. **Never** push to another branch
+  without explicit permission.
