@@ -28,12 +28,43 @@ the ↻ button refreshes it on demand.
 
 | File | Purpose |
 | --- | --- |
-| `src/lib/openrouter-models.ts` | Fetch + cache the live catalog; search, provider, pricing, and context-length helpers. Framework-agnostic (works in React, Vue, plain JS, React Native*). |
-| `src/components/OpenRouterModelPicker.tsx` | Ready-made React settings control: searchable dropdown, provider filter, pricing + context badges, refresh button, loading/error states. |
-| `src/components/openrouter-model-picker.css` | Neutral default styles — swap for your design system. |
+| `src/lib/openrouter-models.ts` | Fetch + cache the live catalog; search, provider, pricing, context-length, plus favorites + recents helpers. Framework-agnostic (works in React, Vue, plain JS, React Native*). |
+| `src/components/OpenRouterModelPicker.tsx` | Ready-made React settings control: searchable dropdown, provider filter, pricing + context badges, refresh button, loading/error states, keyboard nav, favorites, recents, and a virtualized list. |
+| `src/components/openrouter-model-picker.css` | Themeable default styles driven by `--orp-*` design tokens. |
 
 \* On React Native, replace the `localStorage` calls with AsyncStorage; the
 in-memory cache works as-is.
+
+## What the picker does
+
+- **Searchable + provider filter.** Multi-word, case-insensitive search over id,
+  name, and description; filter to a single provider.
+- **Full keyboard navigation.** `↑`/`↓` to move, `Home`/`End` to jump, `Enter`
+  to select, `Esc` to close. The active row auto-scrolls into view.
+- **Favorites (★) and recents.** Star any model to pin it to the top; recently
+  selected models float up too. Both persist in `localStorage`.
+- **Virtualized list.** Only the visible rows render, so all 400+ models scroll
+  smoothly with no framework or list library.
+- **Graceful offline.** If OpenRouter is unreachable, the last cached list is
+  served instead of breaking.
+
+## Theming
+
+Every color, radius, and size is a `--orp-*` custom property on `.orp-root`.
+Override any of them — on `:root`, a wrapper, or the element itself — to reskin
+the picker without editing selectors:
+
+```css
+.orp-root {
+  --orp-accent: #7c3aed;   /* selection + focus ring */
+  --orp-radius: 12px;
+  --orp-star: #f59e0b;
+}
+```
+
+Sensible light **and** dark defaults ship in the CSS (via
+`prefers-color-scheme`), using system `Canvas`/`CanvasText` colors so the picker
+inherits your app's surface by default.
 
 ## Wiring it into your settings screen
 

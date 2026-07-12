@@ -81,6 +81,14 @@ Native (swap `localStorage` for AsyncStorage) untouched.
 | `listProviders(models)` | pure | Unique provider slugs, sorted. |
 | `formatPricing(model)` | pure | Per-million-token string, e.g. `$3.00/M in · $15.00/M out`; `"free"` when zero. |
 | `formatContext(model)` | pure | Compact context size, e.g. `200K ctx`, `1M ctx`. |
+| `getFavorites()` / `isFavorite(id, favs?)` | storage | Read favorited ids (most-recent first). |
+| `toggleFavorite(id)` | storage | Add/remove a favorite; persists and returns the new list. |
+| `getRecents()` / `pushRecent(id)` | storage | Read / record recently-selected ids (deduped, capped at `MAX_RECENTS`). |
+
+Favorites and recents are plain ordered `string[]`s in `localStorage`
+(`FAVORITES_KEY` / `RECENTS_KEY`, both `-v1`-suffixed). They live in the data
+layer on purpose — any UI, or none, can read them. Access is defensive: a
+non-browser runtime or disabled storage yields an empty list, never a throw.
 
 ### Caching model (know this cold)
 
@@ -97,6 +105,19 @@ Native (swap `localStorage` for AsyncStorage) untouched.
 
 ---
 
+## Row-height contract (don't break silently)
+
+The virtualized list only works if three numbers agree:
+
+| Concept | Component | CSS |
+| --- | --- | --- |
+| Row height | `ROW_HEIGHT = 60` | `--orp-row-height: 60px` |
+| Viewport height | `LIST_HEIGHT = 340` | `--orp-list-height: 340px` |
+
+If you change a row's height, change **both** sides or rows will overlap / gaps
+appear and keyboard scroll-into-view will miss. There's no runtime that will
+catch this for you — it's a manual invariant.
+
 ## The component (`OpenRouterModelPicker.tsx`)
 
 - Self-contained, controlled: `value` (selected model id) in, `onChange(id)` out.
@@ -104,9 +125,23 @@ Native (swap `localStorage` for AsyncStorage) untouched.
 - Calls **only** the exported helpers — it never fetches or caches directly.
 - State machine: `loading` → `ready` | `error`, with a retry path and a `↻`
   button that calls `getOpenRouterModels(true)` (force refresh).
-- Accessibility is wired in (`role="listbox"`/`option`, `aria-selected`,
-  `aria-expanded`, click-outside to close). Preserve it if you edit the markup.
-- Only runtime dep is `react` hooks. Don't pull in a UI kit.
+- **Keyboard nav:** `↑`/`↓`/`Home`/`End` move `activeIndex`, `Enter` commits,
+  `Esc` closes. A `useLayoutEffect` scrolls the active row into view — this has
+  to cooperate with virtualization, so it drives `listRef.scrollTop` directly
+  rather than relying on `scrollIntoView` on an unrendered node.
+- **Favorites/recents** float to the top via the `rank()` sort (fav → recent →
+  rest, then alpha). Selecting a model calls `pushRecent`; the ★ button calls
+  `toggleFavorite` and **stops propagation** so it doesn't also select the row.
+- **Virtualization:** rows are absolutely positioned inside a fixed-height
+  scroll container. `ROW_HEIGHT` (60) and `LIST_HEIGHT` (340) are constants that
+  **must stay in sync with the CSS** (`--orp-row-height` / `--orp-list-height`);
+  the window math and the scroll-into-view math both depend on them. Only
+  `[start, end)` rows render, with `OVERSCAN` padding.
+- Accessibility: `role="listbox"`/`option`, `role="combobox"` search input with
+  `aria-activedescendant`, `aria-selected`, `aria-pressed` on the star,
+  click-outside to close. Preserve it if you edit the markup.
+- Only runtime dep is `react` hooks. Don't pull in a UI kit or a virtualization
+  library — the windowing is intentionally hand-rolled and dependency-free.
 
 ---
 
@@ -139,6 +174,10 @@ There's nothing to `build` or `test` here. To actually validate:
    - typing narrows results (multi-word works);
    - the provider dropdown filters;
    - `↻` forces a fresh fetch;
+   - `↑`/`↓`/`Enter`/`Esc` navigate and select by keyboard, and the active row
+     stays in view while scrolling through all 400+;
+   - starring a model pins it to the top and survives a reload; selecting one
+     makes it show up under recents next time;
    - **kill the network and reopen** — the cached list still renders (this is
      the test people forget).
 

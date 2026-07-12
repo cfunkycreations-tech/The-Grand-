@@ -38,6 +38,10 @@ const MODELS_URL = "https://openrouter.ai/api/v1/models";
 const CACHE_KEY = "openrouter-models-cache-v1";
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+const FAVORITES_KEY = "openrouter-favorites-v1";
+const RECENTS_KEY = "openrouter-recents-v1";
+const MAX_RECENTS = 8;
+
 interface CacheEntry {
   fetchedAt: number;
   models: OpenRouterModel[];
@@ -177,4 +181,65 @@ export function formatContext(model: OpenRouterModel): string {
   return len >= 1_000_000
     ? `${(len / 1_000_000).toFixed(len % 1_000_000 ? 1 : 0)}M ctx`
     : `${Math.round(len / 1000)}K ctx`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Favorites & recents
+ *
+ * Both are just ordered lists of model ids in localStorage. Kept in the
+ * (framework-agnostic) data layer so any UI — or none — can read/write them.
+ * All access is defensive so non-browser runtimes and disabled storage
+ * degrade to empty lists instead of throwing.
+ * ------------------------------------------------------------------ */
+
+function readIdList(key: string): string[] {
+  try {
+    const raw = globalThis.localStorage?.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeIdList(key: string, ids: string[]): void {
+  try {
+    globalThis.localStorage?.setItem(key, JSON.stringify(ids));
+  } catch {
+    // Storage full or unavailable — non-fatal.
+  }
+}
+
+/** Favorited model ids, most-recently-favorited first. */
+export function getFavorites(): string[] {
+  return readIdList(FAVORITES_KEY);
+}
+
+/** True if `id` is in the given favorites list (or in storage if omitted). */
+export function isFavorite(id: string, favorites: string[] = getFavorites()): boolean {
+  return favorites.includes(id);
+}
+
+/** Toggle a favorite, persist, and return the new list (new favorites go first). */
+export function toggleFavorite(id: string): string[] {
+  const current = getFavorites();
+  const next = current.includes(id)
+    ? current.filter((x) => x !== id)
+    : [id, ...current];
+  writeIdList(FAVORITES_KEY, next);
+  return next;
+}
+
+/** Recently selected model ids, most-recent first (capped at MAX_RECENTS). */
+export function getRecents(): string[] {
+  return readIdList(RECENTS_KEY);
+}
+
+/** Record a model as just-used; move it to the front, dedupe, cap, persist. */
+export function pushRecent(id: string): string[] {
+  if (!id) return getRecents();
+  const next = [id, ...getRecents().filter((x) => x !== id)].slice(0, MAX_RECENTS);
+  writeIdList(RECENTS_KEY, next);
+  return next;
 }
